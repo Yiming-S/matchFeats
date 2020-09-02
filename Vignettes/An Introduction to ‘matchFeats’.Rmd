@@ -11,13 +11,16 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
+# Introduction
+
 This vignette presents a in-depth overview of the `matchFeats` package.
 
-The `matchFeats` package's name is `One-To-One Feature Matching Under Association Ambiguity`. The package will provide four main functions which are Gaussian Mixture Approach(`match.gaussmix`), K-Means-Like Method(`match.kmeans`), Template-Based Method(`match.template`) and Block Coordinate Ascent Method(`match.bca`).
+The `matchFeats` package's name is `One-To-One Feature Matching Under Association Ambiguity`. The package will provide four main functions which are Block Coordinate Ascent Method(`match.bca`), Gaussian Mixture Approach(`match.gaussmix`), K-Means-Like Method(`match.kmeans`) and Template-Based Method(`match.template`).
+
+The kinds of statistical methods to match feature vectors between sample units under association ambiguity. Applications include object tracking, video surveillance, remote sensing as well as multilevel modeling. Given a fixed number of classes/distributions, for each unit, exactly one vector of each class is observed without label. The goal is to label the feature vectors using each label exactly once so to produce the best match across units, e.g. by minimizing the variability within classes. Several statistical solutions based on empirical loss functions and probabilistic modeling are provided.
 
 
-
-## Installation
+# How to install the package
 
 If you would like to install the development version of `matchFeats`, you may do so
 by using, for example, `devtools`:
@@ -33,32 +36,30 @@ devtools::install_github("ddegras/matchFeats")
 
 After successful installation, we’ll start by loading `matchFeats`:
 ```{r}
+library(clue)
 library(matchFeats)
 ```
 
-## Details
-
-The kinds of statistical methods to match feature vectors between sample units under association ambiguity. Applications include object tracking, video surveillance, remote sensing as well as multilevel modeling. Given a fixed number of classes/distributions, for each unit, exactly one vector of each class is observed without label. The goal is to label the feature vectors using each label exactly once so to produce the best match across units, e.g. by minimizing the variability within classes. Several statistical solutions based on empirical loss functions and probabilistic modeling are provided.
+# How to use the package
 
 Below we will give an overview of all those statistical methods and, further in the document, we will present some usage examples.
 
-## Processing data description 
+## Functions 
 
-The functions will process **n** matrixes which like the **c** columns and **r** rows:
+### Processing data description 
+
+The functions will process **n** matrices which like the **c** columns and **r** rows:
 
 ```{r}
 ## Generate data
-n <- 5
-c <- 3
-r <- 5
-mu <- matrix(1:c, nrow=r, ncol=c, byrow=TRUE)
+n <- 5 # 5 matrices
+c <- 3  # Each matrix has 3 columns
+r <- 5  # Each matrix has 5 rows
+mu <- matrix(1:c, nrow=r, ncol=c, byrow=TRUE) 
 sigma <- 0.3
 x <- array(mu, c(r,c,n)) + rnorm(r*c*n,sigma)
 x
 ```
-
-
-## Functions 
 
 ### Block Coordinate Ascent Method(`match.bca`)
 
@@ -77,12 +78,58 @@ To calculate a common sample covariance for all matched feature vectors, set \co
 
 The optional argument \code{control} is a list with two fields: \code{sigma}, starting point for the optimization (\eqn{(m,n)} matrix of permutations; and \code{maxit}, maximum number of iterations/sweeps. 
 
+#### Equation 
+Let $\Pi$ be the set of all $k \times k$ permutation matrices.
+$$\displaystyle \min_{P_1,...,P_n \in \Pi} \sum_{i=1}^n \sum_{j=1}^n ||X_iP_i-X_jP_j||_F^2$$
+
+Where $||X||_F = (tr(X'X))^{\frac{1}{2}}$
+
+
+$$
+\begin{eqnarray*}
+\displaystyle \sum_{i=1}^n \sum_{j=1}^n ||X_iP_i-X_jP_j||_F^2 &=& \sum_{i=1}^n \sum_{j=1}^n (||X_iP_i||^2_F + ||X_jP_j||^2_F - 2tr(P'_i X'_i X_jP_j)) \\ 
+&=& \sum_{i=1}^n \sum_{j=1}^n (||X_i||^2_F + ||X_j||^2_F - 2tr(P'_i X'_i X_jP_j)) \\ 
+&=& \sum_{i=1}^n \sum_{j=1}^n (||X_i||^2_F + ||X_j||^2_F ) - 2|| \sum_{i=1}^n X_iP_i||_F^2
+\end{eqnarray*}
+$$
+
+$$
+\begin{eqnarray*}
+\displaystyle \max_{P_1,...,P_n \in \Pi}||\sum_{i=1}^nX_iP_i||^2_F
+\end{eqnarray*}
+$$
+
+$$
+\begin{eqnarray*}
+\displaystyle \max_{P_i \in \Pi}||X_iP_i+\sum_{1\leq j \leq n \ j \neq i} X_j \hat{P_j}||_F^2
+\end{eqnarray*}
+$$
+
+$$
+\begin{eqnarray*}
+\displaystyle \max_{P_i \in \Pi}trP_i'(X_i'\sum_{j \neq i} X_j \hat{P_j})
+\end{eqnarray*}
+$$
+
 #### Example
-
 ```{r}
-match.bca(x)
-```
+# Match all feature vectors with Block Coordinate Ascent Method
+bcaResult <- match.bca(x)
 
+# Display results
+bcaResult
+
+# re-arranged (matched) feature vectors
+bcamatched <- array(dim=dim(x)) 
+for (i in 1:n)
+	bcamatched[,,i] <- x[,bcaResult$sigma[,i],i]
+
+# Display matched results
+bcamatched
+
+# Display the summary result
+summary(bcaResult)
+```
 
 ### Gaussian Mixture Approach(`match.gaussmix`)
 
@@ -100,14 +147,57 @@ If method is set to exact (default), the class probabilities of the feature vect
 
 The optional argument control can be specified with these fields: maxit, maximum number of EM iterations (default=1e4); eps, relative tolerance for EM convergence (default=1e-8), the EM algorithm stops if the relative increase in log-likelihood between two iterations is less than this tolerance; verbose, set to TRUE to display algorithm progress (default=FALSE).
 
+#### Equation 
+$$logL_c = \sum_{i=1}^n \sum_{k=1}^m \sum_{l=1}^m log\varphi(x_{ik};\mu_l,\Sigma_l)I_{ikl}$$
+EM algorithm
+
+$\hat{\theta} ={(\hat{\mu},\hat{\Sigma_l} : l \in[m])}$
+
+E step.
+
+$$
+\begin{eqnarray*}
+E_{\hat{\theta}}(I_{ikl}|X_i) &=& P_{\hat{\theta}}(I_{ikl}=1|X_i)\\
+&=& \frac{P_{\hat{\theta}}(X_i|I_{ikl}=1)P_{\hat{\theta}}(I_{ikl}=1)}{P_{\hat{\theta}}(X_i)} \\
+&=& c_iP_{\hat{\theta}}(X_i|I_{ikl}=1) \\
+&=& c_i \sum_{\sigma \in S: \sigma(k)=l}P_{\hat \theta}(X_i|I_{il\sigma(1)}=1,...,I_{im\sigma(m)} =1) \\
+&\times& P_{\hat \theta}(I_{il\sigma(1)}=1,...,I_{im\sigma(m)} =1|I_{ikl}=1) \\
+&=& \frac{c_i}{(m-1)!}\sum_{\sigma \in S: \sigma(k)=l}\prod_{r=1}^m P_{\hat {\theta}} (x_{ir}|I_{ir \sigma(r)}=1) \\
+&=& \frac{c_i}{(m-1)!}\sum_{\sigma \in S: \sigma(k)=l}\prod_{r=1}^m \varphi (x_{ir};\hat{\mu}_{\sigma(r)},\hat{\Sigma}_{\sigma(r)})
+\end{eqnarray*}
+$$
+
+$$
+\begin{eqnarray*}
+E_{\hat{\theta}}(I_{ikl}|X_i) &\approx& E_{\hat{\theta}}(I_{ikl}|x_{ik})\\
+&=& \frac{P_{\hat{\theta}}(x_{ik}|I_{ikl}=1)P_{\hat{\theta}}(I_{ikl}=1)}{P(x_{ik})} \\
+&=& c_{ik}P_{\hat{\theta}}(x_{ik}|I_{ikl}=1) \\
+&=& c_{ik} \varphi(x_{ik};\hat \mu_l,\hat \Sigma_l)
+\end{eqnarray*}
+$$
+$$
+\begin{eqnarray*}
+E_{\hat{\theta}}(I_{ikl}|X_i) &\approx& \frac{c_i}{(m-1)!} \max_{\sigma \in S:\sigma(k)=l}\prod^m_{r=1}\varphi(x_{ir}; \hat \mu_{\sigma(r)},\hat \Sigma_{\sigma(r)}) \\
+\end{eqnarray*}
+$$
+M step
+$$
+\begin{eqnarray*}
+&\mu^+_l& =  \frac{1}{n} \sum^n_{i=1} \sum^m_{k=1}P_{\hat \theta}(I_{ikl}=1|X_i)x_{ik} \\
+&\Sigma^+_l& =  \frac{1}{n} \sum^n_{i=1} \sum^m_{k=1}P_{\hat \theta}(I_{ikl}=1|X_i)(x_{ik}-\mu^+_l)(x_{ik}-\mu^+_l)'
+\end{eqnarray*}
+$$
+Log-likelihood
+$$
+\begin{eqnarray*}
+\log L(\hat \theta) = \sum^n_{i=1}\log \left(\frac{1}{m!} \sum_{\sigma \in S} \prod^m_{k=1} \varphi(x_{ik};\hat \mu_{\sigma(k)},\hat \Sigma_{\sigma(k)}) \right)
+\end{eqnarray*}
+$$
+
 #### Example
-
 ```{r}
-match.gaussmix(x)
-
+# match.gaussmix(x,100)
 ```
-
-
 
 
 ### K-Means-Like Method(`match.kmeans`)
@@ -129,21 +219,31 @@ The optional argument \code{control} can be specified with these fields:
 \code{eps}, relative tolerance for EM convergence (default=1e-8), 
 the EM algorithm stops if the relative increase in log-likelihood between two iterations is less than this tolerance; \code{verbose}, set to TRUE to display
  algorithm progress (default=FALSE). 
+ 
+#### Equation 
+
+$\displaystyle \min_{\sigma_1,...,\sigma_n} \sum_{i=1}^n \sum_{l=1}^k ||X_{i\sigma_i(l)}-\overline{x}_{\sigma,l}||^2$
+
 
 #### Example
 
-Import matrixes, then:
 ```{r}
-## Match all feature vectors
-  result <- match.kmeans(x)
+# Match all feature vectors with K-Means-Like Method
+kResult <- match.kmeans(x)
 
-## Display results 
-  result$cost # cost function
-  xmatched <- array(dim=dim(x)) 
-  
-## re-arranged (matched) feature vectors
-  for (i in 1:n){
-	  xmatched[,,i] <- x[,result$sigma[,i],i]}
+# Display results
+kResult
+
+# re-arranged (matched) feature vectors
+kmatched <- array(dim=dim(x)) 
+for (i in 1:n)
+	kmatched[,,i] <- x[,kResult$sigma[,i],i]
+
+# Display matched results
+kmatched
+
+# Display the summary result
+summary(match.kmeans(x))
 ```
 
 ### Template-Based Method(`match.template`)
@@ -160,23 +260,53 @@ The argument \code{w} can be specified as a vector of positive numbers (will be 
 
 #### Example
 
-Import matrixes, then:
+Import matrices, then:
 ```{r}
-## Match all feature vectors with first case as template
-result <- match.template(x,1)
+# Match all feature vectors with first case as template
+TemplateResult <- match.template(x,1)
 
-## Display results 
-result$cost # cost function
-xmatched <- array(dim=dim(x)) 
+# Display results
+TemplateResult
 
+Tmatched <- array(dim=dim(x)) 
 # re-arranged (matched) feature vectors
-for (i in 1:n){
-	xmatched[,,i] <- x[,result$sigma[,i],i]
-}
+for (i in 1:n)
+	Tmatched[,,i] <- x[,TemplateResult$sigma[,i],i]
 
+# Display matched results
+Tmatched
+
+# Display the summary result
+summary(match.template(x,1))
 ```
 
-## Handwriting example project
+### One-Pass Algorithm(`match.1pass`)
+
+#### Details
+
+#### Equation
+
+#### Example
+```{r}
+## Use one pass function with data in matrix form
+Oneresult <- match.1pass(x, unit=n)
+
+# Display results
+Oneresult
+
+# re-arranged (matched) feature vectors
+Onematched <- array(dim=dim(x)) 
+for (i in 1:n)
+	Onematched[,,i] <- x[,Oneresult$sigma[,i],i]
+
+# Display matched results
+Onematched
+
+# Display the summary result
+summary(Oneresult)
+```
+
+# Handwriting example project
 
 The data comes from UCI - Optical Recognition of Handwritten Digits Data Set which used to test matchFeats packages. 
 There are 3823 training data and 1797 testing data in this handwritten digits data set example projec.  Each data set has 
@@ -187,6 +317,6 @@ str(train)
 ```
 
 
-## References
+# References
 
 * [Degras and Shen (2020). One-to-one feature matching under association ambiguity.](web)
